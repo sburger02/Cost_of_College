@@ -1,0 +1,262 @@
+---
+title: "Final Project"
+author: "Suzanne Burger"
+date: "`r Sys.Date()`"
+documentclass: article
+geometry: margin=1in
+fontsize: 11pt
+output:
+  pdf_document:
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    dev: pdf
+    highlight: tango
+  html_document:
+    theme: default
+    self_contained: true
+    toc: false
+    df_print: kable
+    fig_caption: false
+    number_sections: false
+    smart: true
+    dev: svg
+---
+
+```{r setup, include = FALSE}
+# DO NOT ALTER THIS CHUNK
+# Set knitr options
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = TRUE,
+  fig.width = 5,
+  fig.asp = 0.618,
+  out.width = "70%",
+  dpi = 120,
+  fig.align = "center",
+  cache = FALSE
+)
+# Load required packages
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(infer))
+suppressPackageStartupMessages(library(modelr))
+suppressPackageStartupMessages(library(broom))
+# Load dataset
+college <- read_rds("college.rds") %>%
+  type_convert(
+    na=combine("", "NA", "PrivacySuppressed")
+  )
+# Set seed
+set.seed(98261936)
+```
+
+## Introduction
+
+For the final project I will be looking into the question of "Is there a difference in the average cost for admitted students between east coast and west coast public institutions that are predominantly bachelor's degree granting?". This question is intersting to me because I am curious to see if the location of the college has an effect on the average cost for students. It would be interesting to see if on average it is more expensive to attend a east coast school or a west coast school. For this question I will be doing a hypothesis test to analyze the answer. The columns that I will be using for this are COSTT4_A (attendence.acedemic_year), ST_FIPS (states_fips), CONTROL (ownership), and PREDDEG (degrees_awarded.predominant). The CONTROL and PREDDEG variables will be used to narrow down the dataset by filtering the specific categories I will focus on. I will also use PREDDEG to create a new column that classifies a college as east coast, west coast, or other. 
+
+The states used for the east coast are Rhode Island, Virginia, Georgia, New York, Florida, North Carolina, South Carolina, Delaware, Maryland, Pennsylvania, New Hampshire, Vermont, Massachusetts, Connecticut, Maine and New Jersey. 
+
+The states used for the west coast are California, Washington, Oregon, Alaska, Hawaii, Arizona, and Nevada.
+
+
+## Preprocessing
+
+```{r}
+college_reduced <- college %>%
+  select(
+    c(COSTT4_A, ST_FIPS, CONTROL, PREDDEG)
+  ) %>%
+  filter(
+    PREDDEG == 3,
+    CONTROL == 1,
+    ST_FIPS != 60,
+    ST_FIPS != 64,
+    ST_FIPS != 66,
+    ST_FIPS != 69,
+    ST_FIPS != 70,
+    ST_FIPS != 72,
+    ST_FIPS != 78
+  )
+```
+
+```{r}
+college_reduced <- college_reduced %>%
+  rename("cost_per_year" = "COSTT4_A", 
+         "state_number" = "ST_FIPS",
+         "university_type" = "CONTROL",
+         "primary_degree" = "PREDDEG")
+```
+
+
+```{r}
+college_reduced <- college_reduced %>%
+  mutate(
+    coast = recode(
+        state_number,
+        `2` = "west",
+        `4` = "west",
+        `6` = "west",
+        `15` = "west",
+        `32` = "west",
+        `41` = "west",
+        `9` = "east",
+        `10` = "east",
+        `12` = "east",
+        `13` = "east",
+        `23` = "east",
+        `24` = "east",
+        `25` = "east",
+        `33` = "east",
+        `34` = "east",
+        `36` = "east",
+        `37` = "east",
+        `42` = "east",
+        `44` = "east",
+        `45` = "east",
+        `50` = "east",
+        `51` = "east"
+    )
+  )
+```
+
+`
+```{r}
+college_reduced$coast[is.na(college_reduced$coast)] <- "non-coastal"
+
+college_reduced$cost_per_year[is.na(college_reduced$cost_per_year)] <- mean(college_reduced$cost_per_year, na.rm=TRUE)
+```
+
+
+
+
+## Visualization
+
+Boxplot 1:
+I am creating this graph to see the differnce in median and interquartile range between the west and east coast. I am also creating this graph to see the covariation that occurs between cost and coast.
+
+```{r}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  ggplot() +
+  geom_boxplot(aes(y = cost_per_year, fill = coast))+
+  labs(y = "Cost Per Year",
+       title = "Cost of Attending College in Coastal States")
+```
+The variation between the cost of attending college on the west and east coast seem to be very similar. The medians is roughly the same and the interquartile ranges are roughly the same as well. In terms of covariance, based on the boxplots it does not seem like the cost is highly correlated with the coast since the median price for the west coast and east coast are almost the same.
+
+
+Boxplot 2:
+I created this boxplot to see the difference in the median cost of coastal colleges. I also am color coding the boxplots by coast. 
+```{r fig.asp = 1, fig.width = 8, out.width = "100%"}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  ggplot() +
+  geom_boxplot(aes(y = cost_per_year, fill = coast))+
+  facet_wrap(~ state_number) +
+  labs(y = "Cost Per Year",
+       title = "Cost of Attending College in Coastal States")
+```
+In this plot the differences between median cost is much more obvious than just looking at the coasts in the previous boxplot. Most of the medians fall within the range of 20,000 USD to 25,000 USD. The interquartile ranges are many different sizes. It seems to be that there is a larger covarition between the cost and the state rather than the cost and the coast.
+
+
+Histogram 1:
+I created this histogram to see the shape and center of the cost of college in the United States. 
+```{r}
+college_reduced %>%
+  ggplot() +
+  geom_histogram(aes(x = cost_per_year), bins = 50) +
+  labs(x = "Cost Per Year",
+       title = "Cost of Atending College in the United States")
+```
+This graph shows the the cost of attending college in the United States is roughly unimodal and symmetrical. It also had a center around 21,000 USD. This information is very comparable to what was learned from the boxplots since their medians were roughly between 20,000 USD and 25,000 USD.
+
+
+Histogram 2: 
+I created this graph to see the difference in shape of the distribution of cost of college in the west and east cost.
+```{r}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  ggplot() +
+  geom_histogram(aes(x = cost_per_year, fill = coast), 
+                 bins = 50, alpha = 0.5, position = "identity") +
+  labs(x = "Cost Per Year",
+       title = "Cost of Atending College in Coastal States")
+```
+This graph does not show too much information due to the imbalance of classes. It does show that the center and the shape are roughly the same for colleges on the west coast and east coast. A density plot would have been better so that the imbalance in classes would be fixed.
+
+
+Density Plot:
+I created this plot because after viewing Histogram 2 I felt that more information could be seen in a density plot.
+```{r}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  ggplot() +
+  geom_density(aes(x = cost_per_year, color = coast)) +
+  labs(x = "Cost Per Year",
+       title = "Cost of Atending College in Coastal States")
+```
+This density plot shows the shape of the distribution of cost of college on the west and east coast with the effect of the imbalance in classes eliminated. It can be seen that the shapes are roughly the same except for the increase in the west coast around 34,000 USD. The centers are also similar between the two coasts.
+
+Vioin Plot: 
+I created this plt based on what I learned from the boxplots and the density plots. I wanted the see the effects of the range of the costs while comparing the two coasts side by side.
+```{r}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  ggplot() +
+  geom_violin(aes(x = '', y = cost_per_year, fill = coast)) +
+  facet_wrap(~ coast) +
+  labs(x = "", y = "Cost Per Year",
+       title = "Cost of Atending College in Coastal States")
+```
+This plot shows that the medians are roughly the same like the other graphs did. However, this graph shows that the minimum of the cost on the west coast is greater than the minimum on the east coast. It also shows the increase in the west coast that was seen in the density plot. This increase may have an effect on the results of the hypothesis test. 
+
+
+
+
+
+
+## Summary Statistics
+
+```{r}
+college_reduced %>%
+  filter(
+    coast != "non-coastal"
+  ) %>%
+  group_by(coast) %>%
+  summarise(
+    total = n(),
+    mean = mean(cost_per_year),
+    median = median(cost_per_year),
+    standard_deviation = sd(cost_per_year),
+    IQR = IQR(cost_per_year),
+    minimum = min(cost_per_year),
+    maximum = max(cost_per_year),
+    range = maximum - minimum
+  )
+```
+
+
+
+
+## Data Analysis
+
+
+
+
+## Conclusion
+
+
+
+
+
